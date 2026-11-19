@@ -29,9 +29,10 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
         enable-cache: true
+        cache-dependency-glob: pyproject.toml
 
     - name: Install dependencies
-      run: uv sync --locked
+      run: uv sync
 
     - name: Lint and type check
       if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.15' }}
@@ -72,9 +73,10 @@ jobs:
       with:
         python-version: "3.15"
         enable-cache: true
+        cache-dependency-glob: pyproject.toml
 
     - name: Install dependencies
-      run: uv sync --locked
+      run: uv sync
 
     - name: Wait for Local KMS
       run: |
