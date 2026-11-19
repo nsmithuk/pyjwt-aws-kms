@@ -29,10 +29,14 @@ markers = [
     "integration: needs Local KMS running (run-local-kms.sh); skipped if unreachable",
 ]
 
+[tool.coverage.run]
+source = ["pyjwt_aws_kms"]
+
 [dependency-groups]
 dev = [
     "boto3-stubs[kms]>=1.44.6",
     "mypy>=2.4.1",
     "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.17.5",
 ]
