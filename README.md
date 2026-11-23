@@ -17,7 +17,7 @@ token = jwt.encode(
 claims = jwt.decode(token, key, algorithms=["ES256"])
 ```
 
-- Requires Python 3.12+ and PyJWT 2.8+ (with the `cryptography` extra, which is installed for you).
+- Requires Python 3.12+ and PyJWT 2.15.1+ (with the `cryptography` extra, which is installed for you).
 - Signing calls KMS. Verification does not: it uses the key's public half, fetched once and cached.
 - Asymmetric algorithms only. HMAC (HS256/384/512) is not supported yet.
 
@@ -115,12 +115,14 @@ The JWT `algorithm` must match the KMS key's key spec:
 | `ES256K`                | `ECC_SECG_P256K1`                           | `ECDSA_SHA_256`                          |
 | `EdDSA`                 | `ECC_NIST_EDWARDS25519`                     | `ED25519_SHA_512`                        |
 
-The KMS key's usage must be `SIGN_VERIFY`. Using an algorithm that doesn't match the key (for
-example `ES256` with an RSA key) makes KMS reject the request and boto3 raises its usual
-`ClientError`.
+The KMS key's usage must be `SIGN_VERIFY`. Before signing, the key's public half is checked
+against the algorithm: using an algorithm that doesn't match the key (for example `ES256` with an
+RSA key, or `ES256` with an `ECC_SECG_P256K1` key) raises `jwt.InvalidKeyError` without calling
+`kms:Sign`. PyJWT's minimum key length check (`enforce_minimum_key_length`) applies to KMS keys too.
 
-Not supported: HMAC (`HS*`), RSA-OAEP / encryption keys, ML-DSA, and JWK import/export through
-PyJWT (`PyJWK`) for KMS keys.
+Not supported: HMAC (`HS*`), RSA-OAEP / encryption keys, ML-DSA, and JWK export of a `KMSKey`
+itself (export `key.public_key()` instead). JWK import/export of ordinary keys through the
+registered algorithms keeps working.
 
 ## Permissions
 
@@ -128,7 +130,7 @@ The IAM principal needs, on the KMS key:
 
 | To do this | Permission |
 |------------|------------|
-| Sign (`jwt.encode`) | `kms:Sign` |
+| Sign (`jwt.encode`) | `kms:Sign`, and `kms:GetPublicKey` (called once per `KMSKey`, then cached) |
 | Verify with the `KMSKey` (`jwt.decode`) | `kms:GetPublicKey` (called once per `KMSKey`, then cached) |
 
 Example policy statement:
@@ -141,8 +143,9 @@ Example policy statement:
 }
 ```
 
-A service that only issues tokens needs just `kms:Sign`. One that only verifies needs just
-`kms:GetPublicKey`, or no AWS access at all if you hand it the public key.
+A service that only issues tokens needs both: the public key is used to check that the key
+matches the JWT algorithm before signing. One that only verifies needs just `kms:GetPublicKey`,
+or no AWS access at all if you hand it the public key.
 
 IAM resource ARNs refer to the key, not its alias, so use the key ARN in policies even if your
 code uses an alias.
@@ -177,7 +180,9 @@ register_algorithms(jws)
 jws.encode(b'{"sub":"x"}', key, algorithm="ES256")
 ```
 
-Calling `register_algorithms()` more than once is safe.
+Calling `register_algorithms()` more than once is safe, as is calling it while other threads are
+encoding or decoding. On a `PyJWS(algorithms=[...])` instance, only the enabled algorithms are
+wrapped.
 
 ## Local development against Local KMS
 
